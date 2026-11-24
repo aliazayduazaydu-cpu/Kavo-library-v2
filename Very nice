@@ -1,4 +1,4 @@
---// Modified Mercury UI Library (Draggable Floating Toggle Button + Touch/Mouse Support, Preserving All Systems & Themes)
+--// Modified Mercury UI Library (Fixed Hide/Show & Shadow Clipping Bug + Draggable Floating Toggle Button + Touch/Mouse Support)
 
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -339,26 +339,46 @@ function Library:object(class, properties)
 end
 
 function Library:show(state)
+	Library.Toggled = state
 	self.Toggled = state
 	if not self.mainFrame then return end
-	self.mainFrame.ClipsDescendants = true
+
+	local coreObj = self.mainFrame.AbsoluteObject
+	local savedSize = self.mainFrame.oldSize or UDim2.fromOffset(600, 400)
+
 	if state then
-		self.mainFrame.AbsoluteObject.Visible = true
-		self.mainFrame:tween({Size = self.mainFrame.oldSize, Length = 0.25}, function()
-			rawset(self.mainFrame, "oldSize", (state and self.mainFrame.oldSize) or self.mainFrame.Size)
-			self.mainFrame.ClipsDescendants = false
+		coreObj.Visible = true
+		self.mainFrame.ClipsDescendants = true
+		self.mainFrame:tween({Size = savedSize, Length = 0.2}, function()
+			if Library.Toggled then
+				self.mainFrame.ClipsDescendants = false
+				if self.shadowHolder then
+					self.shadowHolder.Visible = true
+				end
+			end
 		end)
-		wait(0.15)
-		self.mainFrame:fade(not state, self.mainFrame.BackgroundColor3, 0.15)
-	else		
-		self.mainFrame:fade(not state, self.mainFrame.BackgroundColor3, 0.15)
-		wait(0.1)
-		self.mainFrame:tween({Size = UDim2.new(), Length = 0.25}, function()
-			if not self.Toggled then
-				self.mainFrame.AbsoluteObject.Visible = false
+		task.delay(0.08, function()
+			if Library.Toggled then
+				self.mainFrame:fade(false, self.mainFrame.BackgroundColor3, 0.12)
+			end
+		end)
+	else
+		if self.shadowHolder then
+			self.shadowHolder.Visible = false
+		end
+		self.mainFrame.ClipsDescendants = true
+		self.mainFrame:fade(true, self.mainFrame.BackgroundColor3, 0.1)
+		task.delay(0.08, function()
+			if not Library.Toggled then
+				self.mainFrame:tween({Size = UDim2.new(), Length = 0.18}, function()
+					if not Library.Toggled then
+						coreObj.Visible = false
+					end
+				end)
 			end
 		end)
 	end
+
 	if self.toggleButtonText then
 		self.toggleButtonText.Text = (state and "UI") or "OPEN"
 	end
@@ -512,7 +532,7 @@ function Library:create(options)
 		Name = "MercuryToggleButton",
 		Theme = {BackgroundColor3 = "Secondary"},
 		Position = UDim2.new(0, 20, 0.45, 0),
-		Size = UDim2.fromOffset(52, 52),
+		Size = UDim2.fromOffset(48, 48),
 		ZIndex = 1000
 	}):round(10):stroke("Tertiary", 1.5)
 
@@ -579,8 +599,7 @@ function Library:create(options)
 
 		floatingToggleBtn.MouseButton1Click:Connect(function()
 			if suppressClick then return end
-			Library.Toggled = not Library.Toggled
-			Library:show(Library.Toggled)
+			Library:show(not Library.Toggled)
 		end)
 	end
 
@@ -619,6 +638,9 @@ function Library:create(options)
 	end)
 
 	local function closeUI()
+		if shadowHolder then
+			shadowHolder.Visible = false
+		end
 		core.ClipsDescendants = true
 		core:fade(true)
 		wait(0.1)
@@ -900,6 +922,7 @@ function Library:create(options)
 	local mt = setmetatable({
 		core = core,
 		mainFrame = core,
+		shadowHolder = shadowHolder,
 		toggleButtonText = floatingToggleBtn,
 		notifs = notificationHolder,
 		statusText = status,
@@ -926,8 +949,7 @@ function Library:create(options)
 		Description = "Key to show/hide the UI.",
 		Keybind = Enum.KeyCode.Delete,
 		Callback = function()
-			self.Toggled = not self.Toggled
-			Library:show(self.Toggled)
+			Library:show(not Library.Toggled)
 		end,
 	}
 
@@ -1308,6 +1330,7 @@ function Library:tab(options)
 		Theme = self.Theme,
 		core = self.core,
 		mainFrame = self.mainFrame,
+		shadowHolder = self.shadowHolder,
 		toggleButtonText = self.toggleButtonText,
 		layout = layout
 	}, Library)
@@ -1802,6 +1825,7 @@ function Library:section(options)
 		Theme = self.Theme,
 		core = self.core,
 		mainFrame = self.mainFrame,
+		shadowHolder = self.shadowHolder,
 		toggleButtonText = self.toggleButtonText,
 		parentLayout = self.layout,
 		layout = layout
