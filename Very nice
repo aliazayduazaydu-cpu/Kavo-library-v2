@@ -1,4 +1,4 @@
---// Modified Mercury UI Library (Fixed Hide/Show & Shadow Clipping Bug + Draggable Floating Toggle Button + Touch/Mouse Support)
+--// Modified Mercury UI Library: Only floating toggle button moves/drags; main window toggles visibility without moving/resizing
 
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -339,48 +339,16 @@ function Library:object(class, properties)
 end
 
 function Library:show(state)
-	Library.Toggled = state
-	self.Toggled = state
-	if not self.mainFrame then return end
+	local targetState = (state == nil) and (not Library.Toggled) or (not not state)
+	Library.Toggled = targetState
+	self.Toggled = targetState
 
-	local coreObj = self.mainFrame.AbsoluteObject
-	local savedSize = self.mainFrame.oldSize or UDim2.fromOffset(600, 400)
-
-	if state then
-		coreObj.Visible = true
-		self.mainFrame.ClipsDescendants = true
-		self.mainFrame:tween({Size = savedSize, Length = 0.2}, function()
-			if Library.Toggled then
-				self.mainFrame.ClipsDescendants = false
-				if self.shadowHolder then
-					self.shadowHolder.Visible = true
-				end
-			end
-		end)
-		task.delay(0.08, function()
-			if Library.Toggled then
-				self.mainFrame:fade(false, self.mainFrame.BackgroundColor3, 0.12)
-			end
-		end)
-	else
-		if self.shadowHolder then
-			self.shadowHolder.Visible = false
-		end
-		self.mainFrame.ClipsDescendants = true
-		self.mainFrame:fade(true, self.mainFrame.BackgroundColor3, 0.1)
-		task.delay(0.08, function()
-			if not Library.Toggled then
-				self.mainFrame:tween({Size = UDim2.new(), Length = 0.18}, function()
-					if not Library.Toggled then
-						coreObj.Visible = false
-					end
-				end)
-			end
-		end)
+	if self.mainFrame then
+		self.mainFrame.AbsoluteObject.Visible = targetState
 	end
 
 	if self.toggleButtonText then
-		self.toggleButtonText.Text = (state and "UI") or "OPEN"
+		self.toggleButtonText.Text = targetState and "UI" or "OPEN"
 	end
 end
 
@@ -459,77 +427,20 @@ function Library:create(options)
 		VerticalAlignment = Enum.VerticalAlignment.Bottom
 	})
 
+	-- Main menu stays fixed in size and position; only its visibility is toggled by the floating button
 	local core = gui:object("Frame", {
-		Size = UDim2.new(),
+		Size = options.Size,
 		Theme = {BackgroundColor3 = "Main"},
 		Centered = true,
-		ClipsDescendants = true		
+		ClipsDescendants = false,
+		Visible = true
 	}):round(10)
-
-	core:fade(true, nil, 0.2, true)
-	core:fade(false, nil, 0.4)
-	core:tween({Size = options.Size, Length = 0.3}, function()
-		core.ClipsDescendants = false
-	end)
-
-	-- Draggable main UI supporting both MouseButton1 and Touch
-	do
-		local dragging = false
-		local dragInput
-		local dragStartPos
-		local frameStartPos
-
-		core.InputBegan:Connect(function(inp)
-			if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-				dragging = true
-				dragInput = inp
-				dragStartPos = inp.Position
-				frameStartPos = core.Position
-
-				inp.Changed:Connect(function()
-					if inp.UserInputState == Enum.UserInputState.End then
-						dragging = false
-					end
-				end)
-			end
-		end)
-
-		core.InputChanged:Connect(function(inp)
-			if inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch then
-				dragInput = inp
-			end
-		end)
-
-		UserInputService.InputChanged:Connect(function(inp)
-			if inp == dragInput and dragging then
-				local delta = inp.Position - dragStartPos
-				local targetX = frameStartPos.X.Offset + delta.X
-				local targetY = frameStartPos.Y.Offset + delta.Y
-
-				if Library.LockDragging then
-					local minX = core.AbsoluteSize.X * core.AnchorPoint.X
-					local maxX = gui.AbsoluteSize.X - (core.AbsoluteSize.X * (1 - core.AnchorPoint.X))
-					local minY = core.AbsoluteSize.Y * core.AnchorPoint.Y
-					local maxY = gui.AbsoluteSize.Y - (core.AbsoluteSize.Y * (1 - core.AnchorPoint.Y))
-					targetX = math.clamp(targetX, minX, math.max(minX, maxX))
-					targetY = math.clamp(targetY, minY, math.max(minY, maxY))
-				end
-
-				core:tween{
-					Position = UDim2.new(frameStartPos.X.Scale, targetX, frameStartPos.Y.Scale, targetY),
-					Length = Library.DragSpeed
-				}
-			end
-		end)
-	end
-
-	rawset(core, "oldSize", options.Size)
 
 	self.mainFrame = core
 
-	-- Draggable Floating Toggle Button (Parented to ScreenGui so it never disappears with core)
+	-- The ONLY moving/draggable element: Floating Toggle Button
 	local floatingToggle = gui:object("Frame", {
-		Name = "MercuryToggleButton",
+		Name = "MercuryFloatingToggle",
 		Theme = {BackgroundColor3 = "Secondary"},
 		Position = UDim2.new(0, 20, 0.45, 0),
 		Size = UDim2.fromOffset(48, 48),
@@ -537,7 +448,7 @@ function Library:create(options)
 	}):round(10):stroke("Tertiary", 1.5)
 
 	local floatingToggleBtn = floatingToggle:object("TextButton", {
-		Name = "ToggleTrigger",
+		Name = "ToggleButton",
 		Text = "UI",
 		TextSize = 13,
 		Font = Enum.Font.SourceSansBold,
@@ -638,15 +549,7 @@ function Library:create(options)
 	end)
 
 	local function closeUI()
-		if shadowHolder then
-			shadowHolder.Visible = false
-		end
-		core.ClipsDescendants = true
-		core:fade(true)
-		wait(0.1)
-		core:tween({Size = UDim2.new()}, function()
-			gui.AbsoluteObject:Destroy()
-		end)
+		gui.AbsoluteObject:Destroy()
 	end
 
 	if getgenv then
@@ -922,7 +825,6 @@ function Library:create(options)
 	local mt = setmetatable({
 		core = core,
 		mainFrame = core,
-		shadowHolder = shadowHolder,
 		toggleButtonText = floatingToggleBtn,
 		notifs = notificationHolder,
 		statusText = status,
@@ -950,25 +852,6 @@ function Library:create(options)
 		Keybind = Enum.KeyCode.Delete,
 		Callback = function()
 			Library:show(not Library.Toggled)
-		end,
-	}
-
-	settingsTab:toggle{
-		Name = "Lock Dragging",
-		Description = "Makes sure you can't drag the UI outside of the window.",
-		StartingState = true,
-		Callback = function(state)
-			Library.LockDragging = state
-		end,
-	}
-
-	settingsTab:slider{
-		Name = "UI Drag Speed",
-		Description = "How smooth the dragging looks.",
-		Max = 20,
-		Default = 14,
-		Callback = function(value)
-			Library.DragSpeed = (20 - value)/100
 		end,
 	}
 
@@ -1330,7 +1213,6 @@ function Library:tab(options)
 		Theme = self.Theme,
 		core = self.core,
 		mainFrame = self.mainFrame,
-		shadowHolder = self.shadowHolder,
 		toggleButtonText = self.toggleButtonText,
 		layout = layout
 	}, Library)
@@ -1825,7 +1707,6 @@ function Library:section(options)
 		Theme = self.Theme,
 		core = self.core,
 		mainFrame = self.mainFrame,
-		shadowHolder = self.shadowHolder,
 		toggleButtonText = self.toggleButtonText,
 		parentLayout = self.layout,
 		layout = layout
